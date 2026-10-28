@@ -14,20 +14,52 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - name: Checkout
-        uses: actions/checkout@v6
-      - name: Set up Java
-        uses: actions/setup-java@v4
-        with:
-          distribution: temurin
-          java-version: '17'
-      - name: Set up Android SDK
-        uses: android-actions/setup-android@v3
-      - name: Install Android SDK packages
-        run: sdkmanager "platforms;android-35" "build-tools;35.0.0"
-      - name: Set up Gradle
-        uses: gradle/actions/setup-gradle@v4
-        with:
-          gradle-version: '8.9'
+        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+      - name: Select preinstalled JDK 17
+        shell: bash
+        run: |
+          set -euo pipefail
+          if [[ -z "${JAVA_HOME_17_X64:-}" || ! -x "$JAVA_HOME_17_X64/bin/java" ]]; then
+            echo "JDK 17 was not found on this GitHub-hosted runner." >&2
+            exit 1
+          fi
+          echo "JAVA_HOME=$JAVA_HOME_17_X64" >> "$GITHUB_ENV"
+          echo "$JAVA_HOME_17_X64/bin" >> "$GITHUB_PATH"
+          "$JAVA_HOME_17_X64/bin/java" -version
+      - name: Locate Android SDK and sdkmanager
+        shell: bash
+        run: |
+          set -euo pipefail
+          SDK_ROOT="${ANDROID_HOME:-${ANDROID_SDK_ROOT:-/usr/local/lib/android/sdk}}"
+          if [[ ! -d "$SDK_ROOT" ]]; then
+            echo "Android SDK was not found at $SDK_ROOT. Use a GitHub-hosted ubuntu runner with Android SDK installed." >&2
+            exit 1
+          fi
+          SDKMANAGER="$(find "$SDK_ROOT/cmdline-tools" -type f -name sdkmanager -print -quit 2>/dev/null || true)"
+          if [[ -z "$SDKMANAGER" ]]; then
+            SDKMANAGER="$(command -v sdkmanager || true)"
+          fi
+          if [[ -z "$SDKMANAGER" ]]; then
+            echo "sdkmanager was not found in $SDK_ROOT/cmdline-tools." >&2
+            exit 1
+          fi
+          echo "ANDROID_HOME=$SDK_ROOT" >> "$GITHUB_ENV"
+          echo "ANDROID_SDK_ROOT=$SDK_ROOT" >> "$GITHUB_ENV"
+          echo "$SDK_ROOT/platform-tools" >> "$GITHUB_PATH"
+          echo "Using sdkmanager: $SDKMANAGER"
+          yes | "$SDKMANAGER" --sdk_root="$SDK_ROOT" --licenses >/dev/null || true
+          "$SDKMANAGER" --sdk_root="$SDK_ROOT" "platform-tools" "platforms;android-35" "build-tools;35.0.0"
+      - name: Install Gradle 8.9
+        shell: bash
+        run: |
+          set -euo pipefail
+          VERSION="8.9"
+          ZIP="$RUNNER_TEMP/gradle-${VERSION}-bin.zip"
+          curl --fail --location --retry 3 --silent --show-error \
+            "https://services.gradle.org/distributions/gradle-${VERSION}-bin.zip" -o "$ZIP"
+          unzip -q -o "$ZIP" -d "$RUNNER_TEMP"
+          echo "$RUNNER_TEMP/gradle-${VERSION}/bin" >> "$GITHUB_PATH"
+          "$RUNNER_TEMP/gradle-${VERSION}/bin/gradle" --version
       - name: Sync current website into WebView assets
         run: |
           mkdir -p android/app/src/main/assets
@@ -35,6 +67,7 @@ jobs:
       - name: Build debug APK
         shell: bash
         run: |
+          set -euo pipefail
           if [[ "$GITHUB_REPOSITORY" == "$GITHUB_REPOSITORY_OWNER.github.io" ]]; then
             WEB_APP_URL="https://${GITHUB_REPOSITORY_OWNER}.github.io/"
           else
@@ -49,6 +82,7 @@ jobs:
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
+          set -euo pipefail
           if ! gh release view web-apk >/dev/null 2>&1; then
             gh release create web-apk --title "PokeRole 3.0 Android 最新版" --notes "由 GitHub Actions 自動建置。從此 Release 下載 PokeRole3.apk。" --latest
           fi
