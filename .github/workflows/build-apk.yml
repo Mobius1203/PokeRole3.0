@@ -1,0 +1,56 @@
+name: Build and publish Android APK
+on:
+  push:
+    branches: [main]
+    paths:
+      - 'site/**'
+      - 'android/**'
+      - '.github/workflows/build-apk.yml'
+  workflow_dispatch:
+permissions:
+  contents: write
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v6
+      - name: Set up Java
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '17'
+      - name: Set up Android SDK
+        uses: android-actions/setup-android@v3
+      - name: Install Android SDK packages
+        run: sdkmanager "platforms;android-35" "build-tools;35.0.0"
+      - name: Set up Gradle
+        uses: gradle/actions/setup-gradle@v4
+        with:
+          gradle-version: '8.9'
+      - name: Sync current website into WebView assets
+        run: |
+          mkdir -p android/app/src/main/assets
+          cp -R site/. android/app/src/main/assets/
+      - name: Build debug APK
+        shell: bash
+        run: |
+          if [[ "$GITHUB_REPOSITORY" == "$GITHUB_REPOSITORY_OWNER.github.io" ]]; then
+            WEB_APP_URL="https://${GITHUB_REPOSITORY_OWNER}.github.io/"
+          else
+            REPO_NAME="${GITHUB_REPOSITORY#*/}"
+            WEB_APP_URL="https://${GITHUB_REPOSITORY_OWNER}.github.io/${REPO_NAME}/"
+          fi
+          echo "Building WebView app for: $WEB_APP_URL"
+          gradle --no-daemon -p android -PwebAppUrl="$WEB_APP_URL" :app:assembleDebug
+          mkdir -p dist
+          cp android/app/build/outputs/apk/debug/app-debug.apk dist/PokeRole3.apk
+      - name: Publish or update the latest APK release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          if ! gh release view web-apk >/dev/null 2>&1; then
+            gh release create web-apk --title "PokeRole 3.0 Android 最新版" --notes "由 GitHub Actions 自動建置。從此 Release 下載 PokeRole3.apk。" --latest
+          fi
+          gh release upload web-apk dist/PokeRole3.apk --clobber
+          gh release edit web-apk --latest
