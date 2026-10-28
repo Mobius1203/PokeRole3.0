@@ -1,0 +1,18 @@
+plugins { id 'com.android.application' }
+
+def configuredWebAppUrl = (project.findProperty('webAppUrl') ?: System.getenv('WEB_APP_URL') ?: 'https://YOUR_GITHUB_USERNAME.github.io/YOUR_REPOSITORY/').toString()
+def escapedWebAppUrl = configuredWebAppUrl.replace('\\', '\\\\').replace('"', '\\"')
+
+android {
+    namespace 'tw.pokerole.randomizer'
+    compileSdk 35
+    defaultConfig {
+        applicationId 'tw.pokerole.randomizer'
+        minSdk 23
+        targetSdk 28
+        versionCode 1
+        versionName '1.2.0-live'
+        buildConfigField 'String', 'WEB_APP_URL', '"' + escapedWebAppUrl + '"'
+    }
+    buildFeatures { buildConfig true }
+}
