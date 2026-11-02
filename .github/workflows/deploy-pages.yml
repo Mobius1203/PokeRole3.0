@@ -4,6 +4,7 @@ on:
     branches: [main]
     paths:
       - 'site/**'
+      - 'tools/**'
       - '.github/workflows/deploy-pages.yml'
   workflow_dispatch:
 permissions:
@@ -23,6 +24,8 @@ jobs:
     steps:
       - name: Checkout
         uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+      - name: Build evolution relationships and conditions
+        run: python3 tools/enrich_pokemon_evolutions.py --input site/data.js
       - name: Configure Pages
         uses: actions/configure-pages@983d7736d9b0ae728b81ab479565c72886d7745b # v5.0.0 (SHA pinned)
       - name: Upload website

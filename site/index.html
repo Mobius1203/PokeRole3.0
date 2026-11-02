@@ -194,6 +194,28 @@ tbody tr:hover { background:light-dark(#f0f7f2,#283a32); }
 .result-avatar { width:92px; height:92px; object-fit:contain; flex:0 0 92px; padding:5px; border-radius:13px; background:#fff; border:1px solid light-dark(#dce5df,#34433e); }
 @media(max-width:420px){ .apk-actions { align-items:flex-start; flex-direction:column; } .result-avatar { width:72px; height:72px; flex-basis:72px; } }
 
+.evolution-panel { margin-top:14px; border:1px solid light-dark(#d5e3d9,#344b40); background:light-dark(#f8fbf8,#17231d); border-radius:12px; padding:12px; }
+.evolution-panel .evolution-heading { display:flex; justify-content:space-between; align-items:center; gap:8px; margin-bottom:9px; }
+.evolution-panel .evolution-heading strong { font-size:13px; }
+.evolution-columns { display:grid; grid-template-columns:repeat(2,minmax(0,1fr)); gap:9px; }
+.evolution-group { min-width:0; }
+.evolution-group-title { font-size:11px; font-weight:850; color:light-dark(#60766a,#b6c8bd); margin-bottom:6px; }
+.evolution-list { display:grid; gap:7px; }
+.evolution-link { width:100%; display:grid; grid-template-columns:42px minmax(0,1fr); gap:8px; align-items:center; text-align:left; padding:7px; border:1px solid light-dark(#dce7df,#35483d); background:light-dark(#fff,#1c2b23); color:inherit; border-radius:9px; }
+.evolution-link:hover { border-color:var(--site-primary); }
+.evolution-link img { width:42px; height:42px; object-fit:contain; background:#fff; border-radius:7px; }
+.evolution-link-copy { min-width:0; }
+.evolution-link-copy strong { display:block; font-size:12px; overflow-wrap:anywhere; }
+.evolution-link-copy small { display:block; font-size:10px; color:light-dark(#697a70,#b2c4b9); margin-top:2px; }
+.evolution-condition { font-size:11px; line-height:1.55; color:light-dark(#495b50,#c8d7ce); margin:5px 1px 1px; white-space:normal; overflow-wrap:anywhere; }
+.evolution-pill { display:inline-flex; align-items:center; font-size:10px; font-weight:800; border-radius:999px; padding:3px 7px; background:light-dark(#e4f0e8,#294336); color:light-dark(#2b6044,#d5eddd); }
+.evolution-source-note { font-size:10px; line-height:1.55; color:light-dark(#75847a,#9eafa4); margin-top:8px; }
+.evolution-empty { padding:8px; border:1px dashed light-dark(#d5e0d8,#425348); border-radius:8px; color:light-dark(#7b887f,#a9b7ae); font-size:11px; line-height:1.5; }
+.evolution-pokerole-meta { margin-top:9px; padding-top:9px; border-top:1px solid light-dark(#e0e9e2,#35483d); display:grid; gap:5px; }
+.evolution-pokerole-meta div { font-size:11px; line-height:1.55; }
+.evolution-pokerole-meta strong { color:light-dark(#42584a,#cfdfd4); }
+@media(max-width:520px){ .evolution-columns { grid-template-columns:1fr; } }
+
 </style>
   <script src="data.js"></script>
   <script src="site-config.js"></script>
@@ -421,6 +443,56 @@ function choose(p, randomize=true){
 function summaryChips(names, getter){
  return `<div class="summary-chips">${names.map(n=>`<span class="summary-chip">${esc(n)}<strong>${esc(getter(n))}</strong></span>`).join('')}</div>`;
 }
+function evolutionStatusMessage(p){
+ const state=p.evolutionMatchStatus;
+ if(state==='unmatched')return '此名稱／形態或指定的進化前形態未能與外部物種資料精確對應；為避免錯誤連線，未依圖鑑編號推測進化關係。可查看 evolution-audit.json 的未配對項目。';
+ if(state==='special-unmatched')return '此特殊形態尚未能精確對應原形，請檢查 evolution-audit.json。';
+ if(state==='no-evolution')return '資料來源未記錄一般永久進化前後關係。此形態可能沒有進化，或屬於不改變物種的特殊形態。';
+ if(state==='special-form')return '此筆是戰鬥中的暫時形態變化，不列為永久物種進化。';
+ if(state==='matched')return '物種／形態已精確對應進化資料來源。';
+ return '尚未產生進化關係資料；請確認 GitHub Actions 的進化資料整理步驟已成功執行。';
+}
+function evolutionStatusLabel(p){
+ const labels={matched:'已配對',unmatched:'尚未精確配對', 'no-evolution':'來源未記錄永久進化', 'special-form':'特殊暫時形態', 'special-unmatched':'特殊形態尚未配對'};
+ return labels[p.evolutionMatchStatus]||'尚未整理';
+}
+function renderEvolutionRelations(relations, emptyText){
+ const rows=Array.isArray(relations)?relations:[];
+ if(!rows.length)return `<div class="evolution-empty">${esc(emptyText)}</div>`;
+ return `<div class="evolution-list">${rows.map(rel=>{
+  const target=POKEMON[Number(rel.pokemonIndex)];
+  const name=target?target.cn:(rel.name||'未知物種');
+  const en=target?target.en:(rel.englishName||'');
+  const no=target?target.no:(rel.no||'');
+  const img=target?target.image:(rel.image||'');
+  const tag=rel.kind==='special-evolution'?'特殊追加進化':rel.kind==='temporary-form'?'暫時形態':'進化';
+  const button=target?`<button type="button" class="evolution-link" data-evolution-index="${Number(rel.pokemonIndex)}" title="查看${esc(name)}"><span>${pokemonImageMarkup(img,'evolution-rel-avatar',name)}</span><span class="evolution-link-copy"><strong>${esc(name)}</strong><small>${esc(no?`#${no} · `:'')}${esc(en)}</small><span class="evolution-pill">${esc(tag)}</span></span></button>`:`<div class="evolution-empty">${esc(name)} ${esc(en)}</div>`;
+  return `<div>${button}${rel.condition?`<div class="evolution-condition"><strong>主系列遊戲進化條件（PokeAPI）：</strong>${esc(rel.condition)}</div>`:''}</div>`;
+ }).join('')}</div>`;
+}
+function renderEvolutionPanel(p){
+ const hasFields=Object.prototype.hasOwnProperty.call(p,'evolutionMatchStatus');
+ const speed=p.evolutionSpeedPokerole??p.evolutionTime??'';
+ const speedLabel=String(speed).trim()&&String(speed).trim()!=='－'?String(speed).trim():'－（來源標記）';
+ const excelItem=String(p.evolutionExcelItem??p.evolutionItem??'').trim();
+ const excelMethod=String(p.evolutionExcelMethod??p.evolutionMethod??'').trim();
+ const before=renderEvolutionRelations(p.evolvesFrom,'沒有可顯示的進化前形態。');
+ const after=renderEvolutionRelations(p.evolvesTo,'沒有可顯示的進化後形態。');
+ const formBefore=Array.isArray(p.formChangeFrom)?p.formChangeFrom:[];
+ const formAfter=Array.isArray(p.formChangeTo)?p.formChangeTo:[];
+ const specials=[
+  formBefore.length?`<div class="evolution-group"><div class="evolution-group-title">暫時形態原形</div>${renderEvolutionRelations(formBefore,'')}</div>`:'',
+  formAfter.length?`<div class="evolution-group"><div class="evolution-group-title">可變化的特殊形態</div>${renderEvolutionRelations(formAfter,'')}</div>`:''
+ ].filter(Boolean).join('');
+ const excelMeta=`<div class="evolution-pokerole-meta"><div><strong>Pokerole 進化速度：</strong>${esc(speedLabel)}</div>${excelItem?`<div><strong>資料庫進化道具：</strong>${esc(excelItem)}</div>`:''}${excelMethod?`<div><strong>資料庫進化方法：</strong>${esc(excelMethod)}</div>`:''}<div class="evolution-source-note">注意：Excel 的「進化時間」欄位是 Pokerole 規則中的進化速度；白天／夜晚等主系列遊戲時段，會另外列在各條進化條件中。兩者不是同一種時間資料。</div></div>`;
+ return `<section class="evolution-panel"><div class="evolution-heading"><strong>進化關係與條件</strong><span class="evolution-pill">${hasFields?esc(evolutionStatusLabel(p)):'尚未整理'}</span></div>${hasFields?`<div class="evolution-columns"><div class="evolution-group"><div class="evolution-group-title">進化前的寶可夢</div>${before}</div><div class="evolution-group"><div class="evolution-group-title">可以進化成</div>${after}</div></div>${specials?`<div class="evolution-columns" style="margin-top:9px">${specials}</div>`:''}<div class="evolution-source-note">${esc(evolutionStatusMessage(p))}</div>`:`<div class="evolution-empty">${esc(evolutionStatusMessage(p))}</div>`}${excelMeta}</section>`;
+}
+function evolutionSummaryText(p){
+ const get=(rows)=>Array.isArray(rows)?rows.map(r=>`${r.name||r.englishName||'未知'}（${r.condition||'條件未提供'}）`).join('；'):'未提供';
+ const speed=p.evolutionSpeedPokerole??p.evolutionTime??'未標註';
+ return `Pokerole 進化速度：${speed||'未標註'}\n進化前：${get(p.evolvesFrom)}\n進化後：${get(p.evolvesTo)}\n特殊形態前：${get(p.formChangeFrom)}\n特殊形態後：${get(p.formChangeTo)}`;
+}
+
 function renderResult(){
  if(!selected)return;
  const p=selected;
@@ -446,6 +518,7 @@ function renderResult(){
   <div class="card-subhead">技能屬性（已分配 ${totalSkills()} / ${budget()['技能']} 點）</div>${skillBlocks}
   <div class="card-subhead">社交屬性（基礎值 1；額外分配 ${totalSocial()} / ${budget()['社交']} 點）</div>${socialBlock}
   <div class="foot">身高：${esc(p.height||'—')}　體重：${esc(p.weight||'—')}</div>
+  ${renderEvolutionPanel(p)}
   <div class="card-subhead">特性與效果</div><div class="trait-list">${traits||'<div class="smallnote">沒有可顯示的特性。</div>'}</div>`;
 }
 function renderBudget(){
@@ -516,6 +589,7 @@ function randomPick(){
  choose(arr[Math.floor(Math.random()*arr.length)],true);
 }
 listEl.addEventListener('click',e=>{const tr=e.target.closest('tr[data-index]');if(tr){const p=POKEMON[Number(tr.dataset.index)];if(p)choose(p,true);}});
+resultEl.addEventListener('click',e=>{const btn=e.target.closest('button[data-evolution-index]');if(!btn)return;const p=POKEMON[Number(btn.dataset.evolutionIndex)];if(p)choose(p,true);});
 function modifyAllocation(group,name,delta){
  const b=budget();
  if(group==='attribute'){
@@ -551,7 +625,7 @@ document.getElementById('copy').addEventListener('click',()=>{
  const socialText=SOCIAL_NAMES.map(n=>`${n} ${SOCIAL_BASE+(socialAllocation[n]||0)}`).join('、');
  const traitText=(selected.traits||[]).map(t=>`${t}：${TRAITS[t]?.effect||'未提供效果說明'}`).join('\n');
  const pIndex=POKEMON.indexOf(selected),available=(LEARNSETS[pIndex]||[]).filter(pair=>pair[1]<=rankIndex()).map(pair=>MOVES[pair[0]]?.cn||MOVES[pair[0]]?.en).filter(Boolean);
- const text=`Pokerole 3.0 寶可夢角色卡\n${selected.no} ${selected.cn}（${selected.en}）\n屬性：${(selected.types||[]).join('／')}\n圖鑑建議階級：${selected.tier||'未標註'}\n角色卡點數配置階級：${tierSelect.value}\n基礎 HP：${displayStat(selected.stats.HP)}\n基礎屬性：\n${currentStats}\n技能屬性（${totalSkills()}/${b['技能']} 點）：\n${skillText}\n社交屬性（${totalSocial()}/${b['社交']} 點）：\n${socialText}\n可學招式（${available.length}）：\n${available.join('、')}\n特性說明：\n${traitText}`;
+ const text=`Pokerole 3.0 寶可夢角色卡\n${selected.no} ${selected.cn}（${selected.en}）\n屬性：${(selected.types||[]).join('／')}\n圖鑑建議階級：${selected.tier||'未標註'}\n角色卡點數配置階級：${tierSelect.value}\n基礎 HP：${displayStat(selected.stats.HP)}\n基礎屬性：\n${currentStats}\n技能屬性（${totalSkills()}/${b['技能']} 點）：\n${skillText}\n社交屬性（${totalSocial()}/${b['社交']} 點）：\n${socialText}\n可學招式（${available.length}）：\n${available.join('、')}\n進化資訊：\n${evolutionSummaryText(selected)}\n特性說明：\n${traitText}`;
  if(navigator.clipboard&&navigator.clipboard.writeText){navigator.clipboard.writeText(text).then(()=>alert('已複製完整角色摘要')).catch(()=>window.prompt('請手動複製以下內容',text));}else{window.prompt('請手動複製以下內容',text);}
 });
 
