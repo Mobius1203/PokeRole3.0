@@ -214,6 +214,14 @@ tbody tr:hover { background:light-dark(#f0f7f2,#283a32); }
 .evolution-pokerole-meta { margin-top:9px; padding-top:9px; border-top:1px solid light-dark(#e0e9e2,#35483d); display:grid; gap:5px; }
 .evolution-pokerole-meta div { font-size:11px; line-height:1.55; }
 .evolution-pokerole-meta strong { color:light-dark(#42584a,#cfdfd4); }
+.dex-form-panel { margin-top:10px; padding:10px; border:1px dashed light-dark(#b9cfc0,#476151); border-radius:10px; background:light-dark(#f4f9f5,#1a2a21); }
+.dex-form-heading { display:flex; align-items:center; justify-content:space-between; gap:8px; font-size:12px; font-weight:850; margin-bottom:7px; }
+.dex-form-list { display:grid; grid-template-columns:repeat(auto-fit,minmax(185px,1fr)); gap:7px; }
+.dex-form-item { display:grid; grid-template-columns:36px minmax(0,1fr); align-items:center; gap:7px; border:1px solid light-dark(#dce7df,#35483d); background:light-dark(#fff,#1c2b23); color:inherit; border-radius:8px; padding:6px; text-align:left; }
+.dex-form-item img { width:36px; height:36px; object-fit:contain; border-radius:6px; background:#fff; }
+.dex-form-item strong { display:block; font-size:11px; overflow-wrap:anywhere; }
+.dex-form-item small { display:block; color:light-dark(#687970,#b5c4bd); font-size:9px; margin-top:2px; }
+.dex-form-note { color:light-dark(#718076,#a9b8ae); font-size:10px; line-height:1.5; margin-top:7px; }
 @media(max-width:520px){ .evolution-columns { grid-template-columns:1fr; } }
 
 </style>
@@ -448,12 +456,12 @@ function evolutionStatusMessage(p){
  if(state==='unmatched')return '此名稱／形態或指定的進化前形態未能與外部物種資料精確對應；為避免錯誤連線，未依圖鑑編號推測進化關係。可查看 evolution-audit.json 的未配對項目。';
  if(state==='special-unmatched')return '此特殊形態尚未能精確對應原形，請檢查 evolution-audit.json。';
  if(state==='no-evolution')return '資料來源未記錄一般永久進化前後關係。此形態可能沒有進化，或屬於不改變物種的特殊形態。';
- if(state==='special-form')return '此筆是戰鬥中的暫時形態變化，不列為永久物種進化。';
+ if(state==='special-form')return '此筆包含同一物種的特殊／戰鬥型態轉換，不列為永久物種進化；請依各型態條件判斷轉換時機。';
  if(state==='matched')return '物種／形態已精確對應進化資料來源。';
  return '尚未產生進化關係資料；請確認 GitHub Actions 的進化資料整理步驟已成功執行。';
 }
 function evolutionStatusLabel(p){
- const labels={matched:'已配對',unmatched:'尚未精確配對', 'no-evolution':'來源未記錄永久進化', 'special-form':'特殊暫時形態', 'special-unmatched':'特殊形態尚未配對'};
+ const labels={matched:'已配對',unmatched:'尚未精確配對', 'no-evolution':'來源未記錄永久進化', 'special-form':'型態轉換／特殊形態', 'special-unmatched':'特殊形態尚未配對'};
  return labels[p.evolutionMatchStatus]||'尚未整理';
 }
 function renderEvolutionRelations(relations, emptyText){
@@ -465,10 +473,29 @@ function renderEvolutionRelations(relations, emptyText){
   const en=target?target.en:(rel.englishName||'');
   const no=target?target.no:(rel.no||'');
   const img=target?target.image:(rel.image||'');
-  const tag=rel.kind==='special-evolution'?'特殊追加進化':rel.kind==='temporary-form'?'暫時形態':'進化';
+  const tag=rel.kind==='special-evolution'?'特殊追加進化':rel.kind==='temporary-form'?'暫時形態':rel.kind==='battle-form'?'戰鬥型態轉換':'進化';
   const button=target?`<button type="button" class="evolution-link" data-evolution-index="${Number(rel.pokemonIndex)}" title="查看${esc(name)}"><span>${pokemonImageMarkup(img,'evolution-rel-avatar',name)}</span><span class="evolution-link-copy"><strong>${esc(name)}</strong><small>${esc(no?`#${no} · `:'')}${esc(en)}</small><span class="evolution-pill">${esc(tag)}</span></span></button>`:`<div class="evolution-empty">${esc(name)} ${esc(en)}</div>`;
-  return `<div>${button}${rel.condition?`<div class="evolution-condition"><strong>主系列遊戲進化條件（PokeAPI）：</strong>${esc(rel.condition)}</div>`:''}</div>`;
+  return `<div>${button}${rel.condition?`<div class="evolution-condition"><strong>${rel.kind==='battle-form'?'型態轉換條件（能力／遊戲規則）：':rel.kind==='temporary-form'?'特殊形態變化條件：':'主系列遊戲進化條件（PokeAPI）：'}</strong>${esc(rel.condition)}</div>`:''}</div>`;
  }).join('')}</div>`;
+}
+function renderDexFormGroup(p){
+ const group=p.dexFormGroup;
+ if(!group||!Array.isArray(group.variants)||group.variants.length<2)return '';
+ const currentIndex=POKEMON.indexOf(p);
+ const evolutionTargets=new Set([...(p.evolvesFrom||[]),...(p.evolvesTo||[])].map(r=>Number(r.pokemonIndex)));
+ const formTargets=new Set([...(p.formChangeFrom||[]),...(p.formChangeTo||[])].map(r=>Number(r.pokemonIndex)));
+ const siblings=group.variants.filter(v=>Number(v.pokemonIndex)!==currentIndex);
+ if(!siblings.length)return '';
+ const items=siblings.map(v=>{
+  const idx=Number(v.pokemonIndex);const target=POKEMON[idx];
+  const tag=evolutionTargets.has(idx)?'進化關係':formTargets.has(idx)?'型態轉換關係':'同編號紀錄（非直接連結）';
+  const img=target?target.image:(v.image||'');
+  const name=target?target.cn:(v.name||'未知形態');
+  const no=target?target.no:(v.no||'');
+  const en=target?target.en:(v.englishName||'');
+  return target?`<button type="button" class="dex-form-item" data-evolution-index="${idx}" title="查看${esc(name)}"><span>${pokemonImageMarkup(img,'',name)}</span><span><strong>${esc(name)}</strong><small>${esc(no?`#${no} · `:'')}${esc(en)} · ${esc(tag)}</small></span></button>`:`<div class="dex-form-item"><span>${pokemonImageMarkup(img,'',name)}</span><span><strong>${esc(name)}</strong><small>${esc(no)} · ${esc(tag)}</small></span></div>`;
+ }).join('');
+ return `<section class="dex-form-panel"><div class="dex-form-heading"><span>同一全國圖鑑編號的其他紀錄</span><span class="evolution-pill">#${esc(group.dexNumber)} · ${esc(group.count)} 種登錄</span></div><div class="dex-form-list">${items}</div><div class="dex-form-note">圖鑑編號只用來找出同一編號下的多筆登錄，並不代表這些型態能互相轉換。真正的永久進化與型態轉換，請以上方各自的連結和條件為準。</div></section>`;
 }
 function renderEvolutionPanel(p){
  const hasFields=Object.prototype.hasOwnProperty.call(p,'evolutionMatchStatus');
@@ -481,11 +508,11 @@ function renderEvolutionPanel(p){
  const formBefore=Array.isArray(p.formChangeFrom)?p.formChangeFrom:[];
  const formAfter=Array.isArray(p.formChangeTo)?p.formChangeTo:[];
  const specials=[
-  formBefore.length?`<div class="evolution-group"><div class="evolution-group-title">暫時形態原形</div>${renderEvolutionRelations(formBefore,'')}</div>`:'',
-  formAfter.length?`<div class="evolution-group"><div class="evolution-group-title">可變化的特殊形態</div>${renderEvolutionRelations(formAfter,'')}</div>`:''
+  formBefore.length?`<div class="evolution-group"><div class="evolution-group-title">型態轉換來源／原形</div>${renderEvolutionRelations(formBefore,'')}</div>`:'',
+  formAfter.length?`<div class="evolution-group"><div class="evolution-group-title">可轉換成的其他型態</div>${renderEvolutionRelations(formAfter,'')}</div>`:''
  ].filter(Boolean).join('');
  const excelMeta=`<div class="evolution-pokerole-meta"><div><strong>Pokerole 進化速度：</strong>${esc(speedLabel)}</div>${excelItem?`<div><strong>資料庫進化道具：</strong>${esc(excelItem)}</div>`:''}${excelMethod?`<div><strong>資料庫進化方法：</strong>${esc(excelMethod)}</div>`:''}<div class="evolution-source-note">注意：Excel 的「進化時間」欄位是 Pokerole 規則中的進化速度；白天／夜晚等主系列遊戲時段，會另外列在各條進化條件中。兩者不是同一種時間資料。</div></div>`;
- return `<section class="evolution-panel"><div class="evolution-heading"><strong>進化關係與條件</strong><span class="evolution-pill">${hasFields?esc(evolutionStatusLabel(p)):'尚未整理'}</span></div>${hasFields?`<div class="evolution-columns"><div class="evolution-group"><div class="evolution-group-title">進化前的寶可夢</div>${before}</div><div class="evolution-group"><div class="evolution-group-title">可以進化成</div>${after}</div></div>${specials?`<div class="evolution-columns" style="margin-top:9px">${specials}</div>`:''}<div class="evolution-source-note">${esc(evolutionStatusMessage(p))}</div>`:`<div class="evolution-empty">${esc(evolutionStatusMessage(p))}</div>`}${excelMeta}</section>`;
+ return `<section class="evolution-panel"><div class="evolution-heading"><strong>進化關係與條件</strong><span class="evolution-pill">${hasFields?esc(evolutionStatusLabel(p)):'尚未整理'}</span></div>${hasFields?`<div class="evolution-columns"><div class="evolution-group"><div class="evolution-group-title">進化前的寶可夢</div>${before}</div><div class="evolution-group"><div class="evolution-group-title">可以進化成</div>${after}</div></div>${specials?`<div class="evolution-columns" style="margin-top:9px">${specials}</div>`:''}${renderDexFormGroup(p)}<div class="evolution-source-note">${esc(evolutionStatusMessage(p))}</div>`:`<div class="evolution-empty">${esc(evolutionStatusMessage(p))}</div>`}${excelMeta}</section>`;
 }
 function evolutionSummaryText(p){
  const get=(rows)=>Array.isArray(rows)?rows.map(r=>`${r.name||r.englishName||'未知'}（${r.condition||'條件未提供'}）`).join('；'):'未提供';

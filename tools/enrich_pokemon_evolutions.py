@@ -61,6 +61,66 @@ PRIMAL_CONDITIONS = {
     "原始固拉多": "持有紅色寶珠，在戰鬥中發動原始回歸；戰鬥結束後恢復原形。",
 }
 
+# Curated conditions for battle-only forms where the CSV marks the form but
+# the transformation trigger needs the species' ability/game rule explanation.
+# Keys are exact PokeAPI pokemon identifiers, never Pokédex numbers.
+BATTLE_FORM_CONDITIONS = {
+    "palafin-hero": {
+        "text": "特性「全能變身」（Zero to Hero）：海豚俠以平凡型態進入戰鬥後，第一次在未瀕死的情況下被換下場，會轉為全能型態；全能型態維持至該場戰鬥結束，離開戰鬥後恢復平凡型態。",
+        "trigger": "zero-to-hero",
+        "triggerLabel": "特性觸發／換下場",
+        "source": "https://bulbapedia.bulbagarden.net/wiki/Palafin_(Pok%C3%A9mon)",
+    },
+    "wishiwashi-school": {
+        "text": "特性「魚群」（Schooling）：等級至少 20 級時，若進入戰鬥時 HP 高於最大 HP 的 25%，會轉為魚群的樣子；回合結束時 HP 降至最大 HP 的 25% 或以下，會恢復單獨的樣子；若之後 HP 再高於 25%，可再次變為魚群型態。換下場後也會恢復單獨的樣子；在戰鬥外維持單獨的樣子。",
+        "trigger": "schooling",
+        "triggerLabel": "特性觸發／等級與 HP 條件",
+        "source": "https://bulbapedia.bulbagarden.net/wiki/Wishiwashi_(Pok%C3%A9mon)",
+    },
+    "darmanitan-zen": {
+        "text": "必須具隱藏特性「達摩模式」（Zen Mode）：戰鬥中，標準型態的 HP 於回合結束時降至最大 HP 的 50% 或以下，轉為達摩模式；達摩模式的 HP 於回合結束時高於 50%，轉回標準型態。換下場及戰鬥外恢復標準型態。",
+        "trigger": "zen-mode",
+        "triggerLabel": "特性觸發／HP 門檻",
+        "source": "https://bulbapedia.bulbagarden.net/wiki/Zen_Mode_(Ability)",
+    },
+    "darmanitan-galar-zen": {
+        "text": "必須具隱藏特性「達摩模式」（Zen Mode）：伽勒爾達摩狒狒在戰鬥中，標準型態的 HP 於回合結束時降至最大 HP 的 50% 或以下，轉為伽勒爾達摩模式；達摩模式的 HP 於回合結束時高於 50%，轉回伽勒爾標準型態。換下場及戰鬥外恢復伽勒爾標準型態。",
+        "trigger": "zen-mode",
+        "triggerLabel": "特性觸發／HP 門檻",
+        "source": "https://bulbapedia.bulbagarden.net/wiki/Zen_Mode_(Ability)",
+    },
+}
+
+# Battle-only records sometimes share a species ID with several regional/default records.
+# Use exact PokeAPI identifiers to select the matching base form, never the species default blindly.
+BATTLE_FORM_BASE_IDENTIFIERS = {
+    "palafin-hero": "palafin",
+    "wishiwashi-school": "wishiwashi-solo",
+    "darmanitan-zen": "darmanitan-standard",
+    "darmanitan-galar-zen": "darmanitan-galar-standard",
+    "eiscue-noice": "eiscue",
+    "mimikyu-busted": "mimikyu-disguised",
+    "cramorant-gulping": "cramorant",
+    "cramorant-gorging": "cramorant",
+    "morpeko-hangry": "morpeko-full-belly",
+    "zacian-crowned": "zacian",
+    "zamazenta-crowned": "zamazenta",
+}
+
+# Minior's core form is not marked battle-only in pokemon_forms.csv, so link this
+# explicit same-species pair separately. The user's workbook stores one generic core row;
+# the API's red core is used as the representative record, not as a claim that colors switch.
+EXPLICIT_FORM_TRANSITIONS = [
+    {
+        "from": "minior-red-meteor",
+        "to": "minior-red",
+        "text": "特性「界限盾殼」（Shields Down）：戰鬥中，流星的樣子在回合結束時 HP 降至最大 HP 的 50% 或以下，外殼破裂並露出核心；核心的樣子在回合結束時 HP 高於 50%，恢復流星外殼。核心顏色是個別外觀，不會因這項轉換而改色。",
+        "trigger": "shields-down",
+        "triggerLabel": "特性觸發／HP 門檻",
+        "source": "https://bulbapedia.bulbagarden.net/wiki/Minior",
+    }
+]
+
 SPECIAL_ALIASES = {
     "nidoran (female)": "nidoran-f",
     "nidoran (male)": "nidoran-m",
@@ -151,8 +211,28 @@ def slugify(s: str) -> str:
 def candidate_identifiers(p: dict) -> list[str]:
     en = norm_text(p.get("en", ""))
     low = en.lower()
+    cn = norm_text(p.get("cn", "")).replace(" ", "")
     if not en:
         return []
+
+    # These records share an English species label, so use the workbook's explicit form name.
+    # The Pokédex number is used later only to collect/audit sibling records, not to create links.
+    if low == "darmanitan":
+        return ["darmanitan-zen"] if "達摩模式" in cn else ["darmanitan-standard"]
+    if low == "minior (meteor form)" or "流星的樣子" in cn:
+        return ["minior-red-meteor"]
+    if low == "minior (core)" or cn.endswith("核心") or "(核心)" in cn:
+        return ["minior-red"]
+
+    # Palafin's two Pokerole rows share the same English species label.
+    # Use the explicit Chinese form label to select the correct PokeAPI Pokemon record.
+    # This is a form-name match, not a National Dex-number inference.
+    if low == "palafin":
+        if "全能型態" in cn or "英雄型態" in cn or "hero" in cn.lower():
+            return ["palafin-hero"]
+        if "平凡型態" in cn or "零型態" in cn or "zero" in cn.lower():
+            return ["palafin-zero"]
+
     # Darmanitan's Galarian standard/zen entries share the same English label.
     # Use the Chinese form label to distinguish the API form (never the Pokédex number).
     if low == "darmanitan (galarian)" and "達摩模式" in p.get("cn", ""):
@@ -278,7 +358,8 @@ def human_identifier(identifier: str) -> str:
     return (identifier or "").replace("-", " ").replace("_", " ").strip().capitalize()
 
 
-def build_condition(row: dict, lookups: dict, species_name=None) -> dict:
+def build_condition(row: dict, lookups: dict, species_name=None, evolved_species_identifier: str = "",
+                    parent_pokemon_identifier: str = "", evolved_pokemon_identifier: str = "") -> dict:
     item_map = lookups.get("items", {})
     move_map = lookups.get("moves", {})
     location_map = lookups.get("locations", {})
@@ -293,6 +374,14 @@ def build_condition(row: dict, lookups: dict, species_name=None) -> dict:
     min_level = int_or_none(row.get("minimum_level"))
     if min_level:
         parts.append(f"等級達到 {min_level} 級")
+
+    if parent_pokemon_identifier == "rockruff-own-tempo":
+        parts.append("必須是具特性「我行我素」（Own Tempo）的岩狗狗；此條件對應黃昏的樣子")
+    elif parent_pokemon_identifier == "rockruff":
+        if evolved_pokemon_identifier == "lycanroc-midday":
+            parts.append("通常型態岩狗狗（非我行我素型態）於白天升級")
+        elif evolved_pokemon_identifier == "lycanroc-midnight":
+            parts.append("通常型態岩狗狗（非我行我素型態）於夜晚升級")
 
     trigger_item = int_or_none(row.get("trigger_item_id"))
     if trigger_item:
@@ -357,7 +446,10 @@ def build_condition(row: dict, lookups: dict, species_name=None) -> dict:
     if bool_one(row.get("turn_upside_down")):
         parts.append("升級時將裝置倒轉")
     if bool_one(row.get("needs_multiplayer")):
-        parts.append("需要多人連線／共同遊玩")
+        if evolved_species_identifier == "palafin":
+            parts.append("在多人連線的「集友圈（Union Circle）」中升級")
+        else:
+            parts.append("需要多人連線／共同遊玩")
     if bool_one(row.get("near_special_rock")):
         parts.append("在特殊岩石附近升級")
 
@@ -413,27 +505,62 @@ def build_condition(row: dict, lookups: dict, species_name=None) -> dict:
         "versionGroupId": int_or_none(row.get("version_group_id")),
         "requiredPokemonFormId": parent_form,
         "evolvedPokemonFormId": child_form,
+        "requiredPokemonIdentifier": parent_pokemon_identifier,
+        "evolvedPokemonIdentifier": evolved_pokemon_identifier,
         "conditionExpression": expression,
         "source": "PokeAPI pokemon_evolution.csv",
     }
 
-def get_parent_candidate(required_form_id: int | None, parent_species_id: int | None,
-                         entry_by_api_id: dict, pokemon_form_to_pokemon_id: dict,
-                         default_entry_by_species: dict, entries_by_species: dict) -> int | None:
-    if required_form_id:
-        # required_pokemon_form_id is a PokemonForm ID, NOT a pokemon.csv ID.
-        # Resolve form -> Pokemon -> user's exact matched record; never substitute another form.
-        pokemon_id = pokemon_form_to_pokemon_id.get(required_form_id)
-        if pokemon_id is None:
-            return None
-        return entry_by_api_id.get(pokemon_id)
-    if parent_species_id is None:
+def resolve_pokemon_reference(reference_id: int | None, expected_species_id: int | None,
+                              pokemon_by_id: dict, pokemon_form_to_pokemon_id: dict) -> int | None:
+    """Resolve pokemon_evolution form references safely.
+
+    In current PokeAPI pokemon_evolution.csv, base_form_id/evolved_form_id point to
+    pokemon.csv IDs. Some normalized snapshots use required_pokemon_form_id /
+    evolved_pokemon_form_id; accept either representation by validating species_id.
+    """
+    if reference_id is None:
         return None
+    direct = pokemon_by_id.get(reference_id)
+    if direct and (expected_species_id is None or int_or_none(direct.get("species_id")) == expected_species_id):
+        return reference_id
+    mapped = pokemon_form_to_pokemon_id.get(reference_id)
+    mapped_row = pokemon_by_id.get(mapped) if mapped is not None else None
+    if mapped_row and (expected_species_id is None or int_or_none(mapped_row.get("species_id")) == expected_species_id):
+        return mapped
+    return None
+
+
+def get_parent_candidate(reference_id: int | None, parent_species_id: int | None,
+                         entry_by_api_id: dict, pokemon_form_to_pokemon_id: dict,
+                         default_entry_by_species: dict, entries_by_species: dict,
+                         pokemon_by_id: dict) -> tuple[int | None, int | None]:
+    """Return (database index, resolved pokemon.csv ID).
+
+    If a required hidden/API form (e.g. Rockruff with Own Tempo) is absent from the
+    user's workbook but that species has exactly one database row, attach the explicit
+    form requirement to that single species row. If the workbook has multiple rows
+    for that species, do not guess which row represents it.
+    """
+    pokemon_id = resolve_pokemon_reference(reference_id, parent_species_id, pokemon_by_id,
+                                           pokemon_form_to_pokemon_id)
+    if pokemon_id is not None:
+        exact = entry_by_api_id.get(pokemon_id)
+        if exact is not None:
+            return exact, pokemon_id
+        candidates = entries_by_species.get(parent_species_id, []) if parent_species_id is not None else []
+        if len(candidates) == 1:
+            return candidates[0], pokemon_id
+        return None, pokemon_id
+    if reference_id is not None:
+        return None, None
+    if parent_species_id is None:
+        return None, None
     exact_default = default_entry_by_species.get(parent_species_id)
     if exact_default is not None:
-        return exact_default
+        return exact_default, None
     candidates = entries_by_species.get(parent_species_id, [])
-    return candidates[0] if len(candidates) == 1 else None
+    return (candidates[0], None) if len(candidates) == 1 else (None, None)
 
 
 def parse_js_assignments(text: str) -> tuple[dict[str, object], dict[str, tuple[int, int]]]:
@@ -515,13 +642,19 @@ def main():
 
     species_by_id = {int_or_none(r.get("id")): r for r in species_rows if int_or_none(r.get("id")) is not None}
     pokemon_by_id = {int_or_none(r.get("id")): r for r in pokemon_rows if int_or_none(r.get("id")) is not None}
-    # PokeAPI required/evolved_pokemon_form_id values refer to pokemon_forms.csv IDs.
-    # Each form points to its pokemon.csv record through pokemon_id.
+    # pokemon_forms.csv is used to resolve alternate form IDs when a snapshot stores them.
+    # The current PokeAPI pokemon_evolution.csv base_form_id/evolved_form_id normally refer
+    # directly to pokemon.csv IDs; resolve_pokemon_reference validates either representation.
     pokemon_form_to_pokemon_id = {
         int_or_none(r.get("id")): int_or_none(r.get("pokemon_id"))
         for r in pokemon_form_rows
         if int_or_none(r.get("id")) is not None and int_or_none(r.get("pokemon_id")) is not None
     }
+    pokemon_forms_by_pokemon_id = defaultdict(list)
+    for form_row in pokemon_form_rows:
+        form_pokemon_id = int_or_none(form_row.get("pokemon_id"))
+        if form_pokemon_id is not None:
+            pokemon_forms_by_pokemon_id[form_pokemon_id].append(form_row)
     pokemon_by_identifier = {r.get("identifier"): r for r in pokemon_rows if r.get("identifier")}
 
     # Match workbook English species/form names to PokeAPI pokemon identifiers.
@@ -587,9 +720,10 @@ def main():
         if parent_sid is None:
             continue
 
-        # PokeAPI's current CSV uses required_pokemon_form_id/evolved_pokemon_form_id.
-        # Older CSV snapshots used base_form_id/evolved_form_id, so both are read.
-        # Select the latest rule set per explicit form pair, retaining all parallel conditions.
+        # PokeAPI's public CSV schema has used base_form_id/evolved_form_id (pokemon.csv IDs);
+        # some normalized exports use required_pokemon_form_id/evolved_pokemon_form_id.
+        # Resolve by checking the expected species ID against both pokemon.csv and pokemon_forms.csv.
+        # Select the latest rule set per explicit form pair, retaining parallel conditions.
         grouped_rows = defaultdict(list)
         for row in rows:
             parent_form = first_int(row, "required_pokemon_form_id", "base_form_id") or 0
@@ -603,13 +737,14 @@ def main():
             for row in selected_rows:
                 row_parent_form = first_int(row, "required_pokemon_form_id", "base_form_id")
                 row_child_form = first_int(row, "evolved_pokemon_form_id", "evolved_form_id")
-                parent_index = get_parent_candidate(row_parent_form, parent_sid,
-                                                    entry_by_api_id, pokemon_form_to_pokemon_id,
-                                                    default_entry_by_species, entries_by_species)
-                if row_child_form:
-                    # evolved_pokemon_form_id is a PokemonForm ID, resolve it before lookup.
-                    child_pokemon_id = pokemon_form_to_pokemon_id.get(row_child_form)
-                    child_index = entry_by_api_id.get(child_pokemon_id) if child_pokemon_id else None
+                parent_index, parent_api_id = get_parent_candidate(
+                    row_parent_form, parent_sid, entry_by_api_id, pokemon_form_to_pokemon_id,
+                    default_entry_by_species, entries_by_species, pokemon_by_id
+                )
+                child_api_id = resolve_pokemon_reference(row_child_form, child_sid, pokemon_by_id,
+                                                          pokemon_form_to_pokemon_id) if row_child_form else None
+                if row_child_form is not None:
+                    child_index = entry_by_api_id.get(child_api_id) if child_api_id is not None else None
                 else:
                     child_index = default_entry_by_species.get(child_sid)
                     if child_index is None:
@@ -632,7 +767,11 @@ def main():
                     records[child_index]["evolutionMatchStatus"] = "unmatched"
                     continue
 
-                cond = build_condition(row, lookups, species_chinese_name)
+                child_species_identifier = (species_by_id.get(child_sid) or {}).get("identifier", "")
+                parent_identifier = (pokemon_by_id.get(parent_api_id) or {}).get("identifier", "") if parent_api_id else ""
+                child_identifier = (pokemon_by_id.get(child_api_id) or {}).get("identifier", "") if child_api_id else ""
+                cond = build_condition(row, lookups, species_chinese_name, child_species_identifier,
+                                       parent_identifier, child_identifier)
                 edge_key = (parent_index, child_index, cond["text"])
                 if edge_key in edge_seen:
                     continue
@@ -686,6 +825,28 @@ def main():
             records[shedinja_i]["evolvesFrom"].append(make_relation(nincada_i, records, condition, "special-evolution"))
             edge_count += 1
 
+    # Explicit form transitions whose alternate state is not marked is_battle_only in pokemon_forms.csv.
+    for pair in EXPLICIT_FORM_TRANSITIONS:
+        source_index = next((i for i, pid in entry_api_id.items()
+                             if pokemon_by_id.get(pid, {}).get("identifier") == pair["from"]), None)
+        target_index = next((i for i, pid in entry_api_id.items()
+                             if pokemon_by_id.get(pid, {}).get("identifier") == pair["to"]), None)
+        if source_index is None or target_index is None or source_index == target_index:
+            unresolved_edges.append({"fromIdentifier": pair["from"], "toIdentifier": pair["to"],
+                                     "reason": "explicit form transition did not map to two distinct workbook rows"})
+            continue
+        details = {"text": pair["text"], "trigger": pair["trigger"],
+                   "triggerLabel": pair["triggerLabel"], "timeOfDay": "", "source": pair["source"],
+                   "formTransitionPair": [pair["from"], pair["to"]]}
+        if not any(r.get("pokemonIndex") == target_index and r.get("kind") == "battle-form"
+                   for r in records[source_index]["formChangeTo"]):
+            records[source_index]["formChangeTo"].append(make_relation(target_index, records, details, "battle-form"))
+        if not any(r.get("pokemonIndex") == source_index and r.get("kind") == "battle-form"
+                   for r in records[target_index]["formChangeFrom"]):
+            records[target_index]["formChangeFrom"].append(make_relation(source_index, records, details, "battle-form"))
+        records[source_index]["hasBattleFormChanges"] = True
+        records[target_index]["hasBattleFormChanges"] = True
+
     # Temporary transformations are separate from permanent species evolution.
     normalized_cn = {norm_text(p.get("cn", "")).replace(" ", ""): i for i, p in enumerate(records)}
     for i, p in enumerate(records):
@@ -722,23 +883,138 @@ def main():
             p["formChangeFrom"].append(make_relation(base_index, records, details, "temporary-form"))
             records[base_index]["formChangeTo"].append(make_relation(i, records, details, "temporary-form"))
 
+    # Link battle-only forms to their same-species default form. These are reversible
+    # in-battle form changes, not permanent species evolutions. Exact matching uses
+    # the mapped PokeAPI pokemon identifier and its pokemon_forms.csv metadata.
+    battle_form_links = 0
+    battle_form_unmatched = []
+    for pokemon_id, entry_index in entry_by_api_id.items():
+        pokemon_row = pokemon_by_id.get(pokemon_id)
+        if not pokemon_row:
+            continue
+        form_rows = pokemon_forms_by_pokemon_id.get(pokemon_id, [])
+        battle_rows = [r for r in form_rows if bool_one(r.get("is_battle_only")) and not bool_one(r.get("is_mega"))]
+        if not battle_rows:
+            continue
+        species_id = int_or_none(pokemon_row.get("species_id"))
+        base_identifier = BATTLE_FORM_BASE_IDENTIFIERS.get(pokemon_row.get("identifier", ""))
+        base_api_row = pokemon_by_identifier.get(base_identifier) if base_identifier else None
+        base_index = entry_by_api_id.get(int_or_none(base_api_row.get("id"))) if base_api_row else None
+        if base_index is None:
+            # Conservative fallback: only use the default species record when it is the
+            # sole non-battle-only candidate in this workbook species group.
+            candidate_indices = [idx for idx in entries_by_species.get(species_id, []) if idx != entry_index]
+            non_battle_candidates = []
+            for idx in candidate_indices:
+                candidate_pid = next((pid for pid, mapped_idx in entry_by_api_id.items() if mapped_idx == idx), None)
+                candidate_forms = pokemon_forms_by_pokemon_id.get(candidate_pid, []) if candidate_pid else []
+                if not any(bool_one(fr.get("is_battle_only")) and not bool_one(fr.get("is_mega")) for fr in candidate_forms):
+                    non_battle_candidates.append(idx)
+            if len(non_battle_candidates) == 1:
+                base_index = non_battle_candidates[0]
+            elif len(candidate_indices) == 1:
+                base_index = candidate_indices[0]
+        if base_index is None or base_index == entry_index:
+            battle_form_unmatched.append({
+                "pokemonIdentifier": pokemon_row.get("identifier", ""),
+                "pokemonId": pokemon_id,
+                "reason": "battle-only form found but no distinct default-form record in user's database",
+            })
+            continue
+
+        identifier = norm_text(pokemon_row.get("identifier", ""))
+        curated = BATTLE_FORM_CONDITIONS.get(identifier)
+        if curated:
+            condition_text = curated["text"]
+            trigger = curated["trigger"]
+            trigger_label = curated["triggerLabel"]
+            source = curated["source"]
+        else:
+            condition_text = (
+                "PokéAPI 將此形態標記為戰鬥限定型態（is_battle_only=1），且本資料庫已將它精確對應到同一物種的預設形態。"
+                "來源 CSV 未提供此型態的完整觸發條件，因此不自行推定；請以該寶可夢的特性、招式及對應遊戲規則為準。"
+            )
+            trigger = "battle-only-form"
+            trigger_label = "戰鬥限定型態（觸發條件未由 CSV 提供）"
+            source = "https://github.com/PokeAPI/pokeapi/blob/master/data/v2/csv/pokemon_forms.csv"
+
+        details = {
+            "text": condition_text,
+            "trigger": trigger,
+            "triggerLabel": trigger_label,
+            "timeOfDay": "",
+            "source": source,
+            "formIdentifier": identifier,
+            "formMetadata": "pokemon_forms.csv:is_battle_only=1",
+        }
+        # Use API form identity to prevent wrong-form links; do not infer from Dex numbers.
+        forward_exists = any(r.get("pokemonIndex") == entry_index and r.get("kind") == "battle-form"
+                             for r in records[base_index]["formChangeTo"])
+        reverse_exists = any(r.get("pokemonIndex") == base_index and r.get("kind") == "battle-form"
+                             for r in records[entry_index]["formChangeFrom"])
+        if not forward_exists:
+            records[base_index]["formChangeTo"].append(make_relation(entry_index, records, details, "battle-form"))
+        if not reverse_exists:
+            records[entry_index]["formChangeFrom"].append(make_relation(base_index, records, details, "battle-form"))
+        if not (forward_exists and reverse_exists):
+            battle_form_links += 1
+        records[base_index]["hasBattleFormChanges"] = True
+        records[entry_index]["hasBattleFormChanges"] = True
+        if not records[entry_index]["evolvesFrom"] and not records[entry_index]["evolvesTo"]:
+            records[entry_index]["evolutionMatchStatus"] = "special-form"
+
+    # National Pokédex number is used as a discovery/grouping signal only:
+    # it reveals that the workbook contains multiple rows for the same base number.
+    # It NEVER creates evolution or form-transition links by itself.
+    dex_groups = defaultdict(list)
+    for index, p in enumerate(records):
+        match = re.match(r"^(\d+)", str(p.get("no", "")).strip())
+        if match:
+            dex_groups[match.group(1)].append(index)
+    dex_group_summaries = []
+    api_identifier_by_entry = {idx: pokemon_by_id.get(pid, {}).get("identifier", "")
+                               for pid, idx in entry_by_api_id.items()}
+    for dex_number, indices in sorted(dex_groups.items(), key=lambda x: int(x[0])):
+        if len(indices) <= 1:
+            continue
+        variants = []
+        for idx in indices:
+            rec = records[idx]
+            variants.append({"pokemonIndex": idx, "no": rec.get("no", ""),
+                             "name": norm_text(rec.get("cn", "")),
+                             "englishName": norm_text(rec.get("en", "")),
+                             "image": rec.get("image", ""),
+                             "apiIdentifier": api_identifier_by_entry.get(idx, "")})
+        summary = {"dexNumber": dex_number, "count": len(indices), "variants": variants}
+        dex_group_summaries.append(summary)
+        for idx in indices:
+            # Shallow-copy the group and its variant list per record for JSON stability.
+            records[idx]["dexFormGroup"] = {"dexNumber": dex_number, "count": len(indices),
+                                             "variants": [dict(v) for v in variants]}
+
     # Sort by names, not numbers. Report forms that could not be matched instead of guessing.
     for p in records:
         for field in ("evolvesFrom", "evolvesTo", "formChangeFrom", "formChangeTo"):
             p[field].sort(key=lambda x: x.get("name", ""))
-        if p.get("evolutionMatchStatus") == "matched" and not any(
-            p[k] for k in ("evolvesFrom", "evolvesTo", "formChangeFrom", "formChangeTo")
-        ):
-            p["evolutionMatchStatus"] = "no-evolution"
+        if p.get("evolutionMatchStatus") == "matched":
+            has_permanent_edges = bool(p["evolvesFrom"] or p["evolvesTo"])
+            has_form_edges = bool(p["formChangeFrom"] or p["formChangeTo"])
+            if has_form_edges and not has_permanent_edges:
+                p["evolutionMatchStatus"] = "special-form"
+            elif not has_form_edges and not has_permanent_edges:
+                p["evolutionMatchStatus"] = "no-evolution"
 
     meta = values.get("POKEROLE_DATABASE_META", {})
     matched_count = sum(1 for state in entry_status.values() if state == "matched")
     meta["evolutionRelations"] = edge_count
+    meta["battleFormLinks"] = battle_form_links
+    meta["dexNumberMultiFormGroups"] = len(dex_group_summaries)
+    meta["dexNumberMultiFormRecords"] = sum(g["count"] for g in dex_group_summaries)
     meta["evolutionMatchedPokemon"] = matched_count
     meta["evolutionUnmatchedPokemon"] = len(unmatched)
     meta["evolutionSource"] = "https://github.com/PokeAPI/pokeapi/tree/master/data/v2/csv"
     meta["evolutionGeneratedAtUtc"] = generated_at
-    meta["evolutionMatchingRule"] = "English species/form identifier + explicit species evolution graph; never National Dex number adjacency"
+    meta["evolutionMatchingRule"] = "Exact English/PokeAPI species-form identifiers + explicit evolution graph; National Dex number groups are audit/display hints only and never create links"
 
     replacements = []
     for name in ("POKEROLE_DATABASE_META", "POKEMON_DATABASE"):
@@ -758,6 +1034,11 @@ def main():
         "unmatchedToPokeAPI": len(unmatched),
         "permanentEvolutionEdges": edge_count,
         "specialFormRecords": sum(1 for p in records if p.get("specialFormKind")),
+        "battleFormLinks": battle_form_links,
+        "dexNumberMultiFormGroups": len(dex_group_summaries),
+        "dexNumberMultiFormRecords": sum(g["count"] for g in dex_group_summaries),
+        "dexNumberGroups": dex_group_summaries,
+        "unmatchedBattleForms": battle_form_unmatched,
         "statusCounts": {status: sum(1 for p in records if p.get("evolutionMatchStatus") == status)
                          for status in sorted({p.get("evolutionMatchStatus", "") for p in records})},
         "unmatchedRecords": unmatched,
@@ -768,6 +1049,10 @@ def main():
         "notes": [
             "Excel evolutionTime is retained as Pokerole evolution speed, not a main-series day/night condition.",
             "Mega Evolution and Primal Reversion are kept as temporary form changes, not permanent evolution.",
+            "PokeAPI battle-only forms are linked bidirectionally to the exact default form within the same species; these are not permanent evolutions.",
+            "Palafin Hero, Wishiwashi Schooling, Darmanitan Zen Mode, and Minior Shields Down use curated ability/game conditions.",
+            "Lycanroc forms are permanent evolution branches from Rockruff, not reversible form switches; Own Tempo Rockruff is resolved to the sole Rockruff row only when no separate Own Tempo row exists.",
+            "National Pokédex number groups only identify multiple workbook rows for review; exact API identifiers/species/evolution references decide whether a link is evolution or form change.",
             "Unmatched species/forms remain explicitly unmatched; no relationship is guessed from Pokédex numbers.",
         ],
     }
@@ -778,7 +1063,10 @@ def main():
     print(f"[OK] Matched by English species/form name: {matched_count}", flush=True)
     print(f"[OK] Permanent evolution edges: {edge_count}", flush=True)
     print(f"[OK] Special form records (Mega/Primal): {audit['specialFormRecords']}", flush=True)
+    print(f"[OK] Battle-only form links: {battle_form_links}", flush=True)
+    print(f"[OK] Same National Dex number groups: {len(dex_group_summaries)} groups / {sum(g['count'] for g in dex_group_summaries)} records (grouping only; no links inferred)", flush=True)
     print(f"[WARN] Unmatched form/name records: {len(unmatched)} (listed in evolution-audit.json)", flush=True)
+    print(f"[WARN] Unmatched battle forms: {len(battle_form_unmatched)} (listed in evolution-audit.json)", flush=True)
     print(f"[OK] Updated: {output_path}", flush=True)
 
 
